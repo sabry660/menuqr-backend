@@ -1,0 +1,84 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: menuqr
+          POSTGRES_PASSWORD: menuqr
+          POSTGRES_DB: menuqr_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U menuqr -d menuqr_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      DATABASE_URL: postgresql+psycopg://menuqr:menuqr@localhost:5432/menuqr_test
+      TEST_DATABASE_URL: postgresql+psycopg://menuqr:menuqr@localhost:5432/menuqr_test
+      REDIS_URL: redis://localhost:6379/0
+      JWT_SECRET: ci-test-secret-not-for-production
+      APP_ENV: test
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: pip install -r requirements-dev.txt
+
+      - name: Lint (ruff)
+        run: ruff check .
+
+      - name: Format check (black)
+        run: black --check .
+
+      - name: Type check (mypy)
+        run: mypy app || true # non-blocking until the codebase is fully annotated
+
+      - name: Run Alembic migrations
+        run: alembic upgrade head
+
+      - name: Verify migrations are in sync with models (no drift)
+        run: alembic check
+
+      - name: Run tests with coverage
+        run: pytest --cov=app --cov-report=term-missing
+
+      - name: Verify the app starts and /health responds
+        run: |
+          uvicorn app.main:app --host 0.0.0.0 --port 8000 &
+          SERVER_PID=$!
+          sleep 5
+          curl -f http://localhost:8000/health
+          curl -f http://localhost:8000/openapi.json > /dev/null
+          kill $SERVER_PID
+
+      - name: Verify openapi.yaml is in sync with the API
+        run: python scripts/export_openapi.py --check

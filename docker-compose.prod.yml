@@ -1,0 +1,38 @@
+# Production overlay: uses an EXTERNAL managed Postgres/Redis (no bundled DB, no exposed DB ports).
+# Usage: docker compose -f docker-compose.prod.yml --env-file .env.production up -d --build
+services:
+  migrate:
+    build: .
+    env_file: .env.production
+    command: alembic upgrade head
+    restart: "no"
+
+  app:
+    build: .
+    env_file: .env.production
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 4 --proxy-headers
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health/ready"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    volumes:
+      - storage_data:/app/storage
+
+  cleanup:
+    build: .
+    env_file: .env.production
+    # Run daily via host cron / scheduler:  docker compose -f docker-compose.prod.yml run --rm cleanup
+    command: python scripts/cleanup_tokens.py
+    restart: "no"
+    profiles: ["jobs"]
+
+volumes:
+  storage_data:

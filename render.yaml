@@ -1,0 +1,21 @@
+services:
+  - type: web
+    name: menuqr-backend
+    env: python
+    region: oregon
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: PORT
+        value: 8000
+      - key: APP_ENV
+        value: production
+      - key: PYTHON_VERSION
+        value: 3.13
+    # Add these environment variables in Render Dashboard after deployment:
+    # GROQ_API_KEY (from Groq Console)
+    # AI_SERVICE_API_KEY (your secret key)
+    # DATABASE_URL (from Neon - see DEPLOYMENT_GUIDE.md)
+    # JWT_SECRET (generate with: openssl rand -hex 32)
+    # REDIS_URL (from Render Redis - optional but recommended)
