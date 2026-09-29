@@ -1,4 +1,5 @@
 from contextlib import asynccontextmanager
+import socket
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -97,3 +98,31 @@ async def health_ready():
         from fastapi.responses import JSONResponse
 
         return JSONResponse(status_code=503, content={"status": "not_ready", "database": str(exc)})
+
+
+@app.get("/debug/db-network", tags=["Debug"], summary="Debug database network connectivity")
+async def debug_db_network():
+    host = "ep-steep-glade-arzs4n5w-pooler.c-4.us-west-2.aws.neon.tech"
+
+    try:
+        addresses = socket.getaddrinfo(
+            host,
+            5432,
+            type=socket.SOCK_STREAM
+        )
+
+        return {
+            "host": host,
+            "addresses": [
+                {
+                    "family": str(addr[0]),
+                    "address": addr[4][0]
+                }
+                for addr in addresses
+            ]
+        }
+
+    except Exception as e:
+        return {
+            "error": str(e)
+        }
