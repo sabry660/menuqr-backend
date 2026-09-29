@@ -18,8 +18,14 @@ configure_logging()
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Seed the default plan catalog (Free/Pro/Business) on startup if missing.
-    async with AsyncSessionLocal() as db:
-        await ensure_plans_seeded(db)
+    # Skip on first startup to avoid blocking deployment if DB is not ready
+    try:
+        async with AsyncSessionLocal() as db:
+            await ensure_plans_seeded(db)
+    except Exception as e:
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.warning(f"Failed to seed plans on startup: {e}. Will be seeded on first use.")
     yield
     await engine.dispose()
 
