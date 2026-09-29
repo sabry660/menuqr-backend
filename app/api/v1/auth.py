@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Depends, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
+import logging
 
 from app.api.deps import get_current_user
 from app.core.database import get_db
@@ -21,6 +22,8 @@ from app.schemas.auth import (
 )
 from app.services import auth_service
 
+logger = logging.getLogger(__name__)
+
 router = APIRouter(prefix="/auth", tags=["Authentication"])
 
 
@@ -38,14 +41,20 @@ def _client_meta(request: Request) -> tuple[str | None, str | None]:
     dependencies=[Depends(rate_limit("register", per_minute=3))],
 )
 async def register(payload: RegisterRequest, db: AsyncSession = Depends(get_db)):
-    user, _tenant = await auth_service.register_user(
-        db,
-        email=payload.email,
-        password=payload.password,
-        full_name=payload.full_name,
-        tenant_name=payload.tenant_name,
-    )
-    return user
+    try:
+        logger.info(f"Register attempt for email: {payload.email}")
+        user, _tenant = await auth_service.register_user(
+            db,
+            email=payload.email,
+            password=payload.password,
+            full_name=payload.full_name,
+            tenant_name=payload.tenant_name,
+        )
+        logger.info(f"Registration successful for email: {payload.email}")
+        return user
+    except Exception as e:
+        logger.error(f"Registration failed for email {payload.email}: {str(e)}", exc_info=True)
+        raise
 
 
 @router.post(
